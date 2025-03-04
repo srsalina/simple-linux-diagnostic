@@ -27,51 +27,51 @@ while getopts "o:" opt; do
     esac
 done
 
-# Function to print section headers (no tee here to avoid duplication)
+# Function to print section headers
 print_section() {
-    echo -e "\n${BLUE}=== $1 ===${NC}"
+    echo -e "\n${BLUE}===== $1 =====${NC}"
+    echo "----------------------------------------"
 }
 
 # All output piped to tee once at the end
 {
-    echo "System Diagnostic Report - Generated on $(date)"
+    echo "System Diagnostic Report"
+    echo "Generated: $(date)"
     echo "----------------------------------------"
 
     print_section "Storage Utilization"
-    df -h
-    echo ""
-    lsblk
+    df -h | awk 'NR==1 || $5+0 >= 90 || $6 ~ /^\/mnt\/[c-e]/ {print}'  # Show header, >90% usage, or Windows mounts
+    echo -e "\nBlock Devices:"
+    lsblk -o NAME,SIZE,RO,TYPE,MOUNTPOINTS -e 7  # Exclude loop devices
 
     print_section "RAM Usage"
-    free -h
+    free -h | grep -E 'Mem:|Swap:'
 
     print_section "CPU Usage"
-    top -bn1 | head -n 10
-    echo ""
-    lscpu | grep -E "Architecture|Model name|CPU\(s\):|Thread\(s\)|Core\(s\)"
+    top -bn1 | head -n 7  # Top summary only
+    echo -e "\nTop Processes:"
+    top -bn1 | head -n 10 | tail -n 3  # Top 3 processes
+    echo -e "\nCPU Info:"
+    lscpu | grep -E "Architecture|Model name|CPU\(s\):|Thread\(s\)|Core\(s\)" | sed 's/^[[:space:]]*//'
 
     print_section "Operating System Details"
-    echo "OS Release:"
-    cat /etc/os-release
-    echo -e "\nKernel Version:"
-    uname -r
-    echo -e "\nUptime:"
-    uptime
+    echo "OS Release:"; cat /etc/os-release | grep -E "PRETTY_NAME|VERSION=" | sed 's/^[[:space:]]*//'
+    echo -e "\nKernel:"; uname -r
+    echo -e "\nUptime:"; uptime -p
 
     print_section "General System Information"
     echo "Hostname: $(hostname)"
-    echo "CPU Info:"
-    cat /proc/cpuinfo | grep "model name" | head -n 1
-    echo "Total Processes: $(ps aux | wc -l)"
-    echo "Network Interfaces:"
-    ip addr show | grep inet
+    echo "CPU Model:"; cat /proc/cpuinfo | grep "model name" | head -n 1 | cut -d':' -f2 | sed 's/^[[:space:]]*//'
+    echo "Processes Running:"; ps aux | wc -l
+    echo -e "\nNetwork IPs:"
+    ip addr show | grep inet | awk '{print $2}' | sed 's/^[[:space:]]*//'
 
     print_section "System Logs (Warnings and Errors)"
-    echo "Last 50 System Log Errors/Warnings:"
-    journalctl -p 3 -xb | tail -n 50
+    echo "Last 20 Critical Logs:"
+    journalctl -p 3 -xb | grep -Ei "error|failed|critical" | tail -n 20  # Filter and limit to 20
     echo -e "\nFailed Services:"
-    systemctl --failed
-} | tee -a "$OUTPUT_FILE"
+    systemctl --failed | grep -E "loaded|SUB" | sed 's/^[[:space:]]*//'
+} | tee "$OUTPUT_FILE"  # Changed from -a to avoid appending issues
 
 # Set file permissions and provide feedback
 if [ "$SAVE_TO_FILE" = true ]; then
