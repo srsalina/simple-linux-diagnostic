@@ -49,12 +49,12 @@ print_section() {
     free -h | grep -E 'Mem:|Swap:'
 
     # Running Services/Applications
-    Write-Section "Running Services"
-    Write-DiagOutput "Key Services Status:"
-    foreach ($svc in @("TermService", "EventLog")) { $status = Get-Service $svc -ErrorAction SilentlyContinue; Write-DiagOutput "  $($svc): $($status.Status)" }
-    Write-DiagOutput ""
-    Write-DiagOutput "Top Memory Consumers:"; Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 3 | ForEach-Object { Write-DiagOutput "  $($_.Name) ($([math]::Round($_.WorkingSet64/1MB,2))MB)" }
-
+    print_section "Running Services"
+    echo "Key Services Status:"
+    for svc in sshd cron; do systemctl is-active $svc &>/dev/null && echo "  $svc: Running" || echo "  $svc: Stopped"; done
+    echo -e "\nTop Memory Consumers:"
+    ps aux --sort=-%mem | head -n 4 | awk '{print "  " $11 " (" $6/1024 "MB)"}'
+    
     # CPU Information
     print_section "CPU Usage"
     top -bn1 | head -n 7  # Top summary only
